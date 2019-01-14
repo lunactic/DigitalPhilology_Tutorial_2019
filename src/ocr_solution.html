@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css" integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M"
+        crossorigin="anonymous">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <link href="jumbotron.css" rel="stylesheet">
+</head>
+<script>
+    var currentImage;
+    var currentFile;
+    var identifier;
+    var collection;
+
+    async function recognize() {
+        document.getElementById("spinner").style.visibility = 'visible';
+        try {
+            await binarize();
+            await segment();
+            await recognizeText();
+        } catch (error) {
+            console.log(error);
+            document.getElementById("errors").innerHTML = "Error: Find more information in the logfile at: <a href='" + error.output[0].file.url + "'> ERROR LOGFILE</a>";
+        }
+        document.getElementById("spinner").style.visibility = 'hidden';
+    }
+
+    /**
+    * Binarize the original input image and store the result on DIVAServices
+    */
+    function binarize() {
+        return new Promise((resolve, reject) => {
+            //JSON Object for the request
+            //identifier is set automatically by uploadImage() that is triggered on the image selection
+            var data = JSON.stringify({
+                "parameters": {
+                    "enableSkew": true,
+                    "maxskew": 2.0,
+                    "skewsteps": 8.0
+                },
+                "data": [
+                    {
+                        "inputImage": identifier
+                    }
+                ]
+            });
+            //Create a POST request to the method on DIVAServices
+            fetch("http://divaservices.unifr.ch/api/v2/binarization/ocropusbinarization/1", {
+                method: "POST",
+                body: data,
+                headers: new Headers({ 'content-type': 'application/json' })
+            }).then(function (res) {
+                return res.json();
+            }).then(async function (data) {
+                //Poll for the result
+                try {
+                    var result = await getResult(data.results[0].resultLink);
+                } catch (error) {
+                    return reject(error);
+                }
+                //Display the binarization image
+                document.getElementById("bin_image").src = result.output[0].file.url;
+                document.getElementById("bin_result").style.visibility = 'visible';
+                var resultCollection = data.resultCollection
+                console.log(resultCollection)
+                //JSON Object for the upload request for the result image
+                //create the new identifier for the uploaded image
+                identifier = resultCollection + "/" + result.output[0].file.options.filename
+                resolve();
+            });
+        });
+    }
+
+    /**
+    * Segment the binarized image into individual textlines
+    */
+    function segment() {
+        return new Promise((resolve, reject) => {
+            //Create JSON Object for the segmentation request
+            var data = JSON.stringify({
+                "parameters": {},
+                "data": [
+                    {
+                        "inputImage": identifier
+                    }
+                ]
+            });
+            //Execute the text page segmentation
+            fetch("http://divaservices.unifr.ch/api/v2/segmentation/ocropuspagesegmentation/1", {
+                method: "POST",
+                body: data,
+                headers: new Headers({ 'content-type': 'application/json' })
+            }).then(function (res) {
+                return res.json();
+            }).then(async function (data) {
+                //poll for the results
+                try {
+                    var result = await getResult(data.results[0].resultLink);
+                } catch (error) {
+                    console.log("Error!");
+                    return reject(error);
+                }
+                var resulCollectionLink = data.resultCollectionLink;
+                collection = data.resultCollection
+                //iterate over the output to find the visualization image
+                for (var index = 0; index < result.output.length; index++) {
+                    var element = result.output[index];
+                    if (Object.keys(element)[0] === "file") {
+                        //only include images but not the full page segmentation image
+                        if (element.file["mime-type"].includes("image/png") && element.file.name.includes("segmentationImage")) {
+                            //Display the segmentation image
+                            document.getElementById("seg_image").src = element.file.url;
+                            document.getElementById("seg_result").style.visibility = 'visible';
+                        }
+                    }
+                }
+                resolve();
+            });
+        });
+    }
+
+    /**
+    * recognize the text of all text lines
+    */
+    function recognizeText() {
+        return new Promise((resolve, reject) => {
+            //JSON object for the recognition request
+            var data = JSON.stringify({
+                "parameters": {},
+                "data": [
+                    {
+                        "dataFolder": collection, //collection name of the extracted text lines
+                        "recognitionModel": "ocr_models/fraktur.gz" //default english recognition model
+                    }
+                ]
+            });
+            //execute the text recognition
+            fetch("http://divaservices.unifr.ch/api/v2/ocr/ocropusrecognize/1", {
+                method: "POST",
+                body: data,
+                headers: new Headers({ 'content-type': 'application/json' })
+            }).then(function (res) {
+                return res.json();
+            }).then(async function (data) {
+                //poll for the result
+                try {
+                    var result = await getResult(data.results[0].resultLink);
+                } catch (error) {
+                    return reject(error);
+                }
+                var text = "";
+                //iterate over all result files and extract the text
+                for (var index = 0; index < result.output.length; index++) {
+                    var element = result.output[index];
+                    if (Object.keys(element)[0] === "file") {
+                        if (element.file["mime-type"] === "text/plain" && !(element.file.type === "log")) {
+                            text += await getText(element);
+                        }
+                    }
+                }
+                //append the recognized thext to the output area
+                document.getElementById("result").innerHTML = text;
+                resolve();
+            });
+        });
+    }
+
+    /**
+    * Get the transcription of a single text line
+    */
+    function getText(element) {
+        return new Promise((resolve, reject) => {
+            fetch(element.file.url, {
+                method: "GET"
+            }).then(async function (res) {
+                resolve(await res.text() + "<br />");
+            });
+        });
+    }
+
+
+    /**
+     * 
+     * Fetch the result from a given url
+     * Polls for the result every 1000ms (1s)
+     *  
+     * */
+    function getResult(url) {
+        return new Promise((resolve, reject) => {
+            fetch(url, {
+                method: "GET"
+            }).then(function (res) {
+                return res.json();
+            }).then(function (data) {
+                if (data.status === "done") {
+                    resolve(data);
+                } else if (data.status === "error") {
+                    return reject(data);
+                } else {
+                    setTimeout(function () {
+                        resolve(getResult(url));
+                    }, 1000);
+                }
+            });
+        });
+    }
+
+    /**
+     * Get the result from an upload operation
+     * Polls every 1000ms (1s) to check if the collection is available
+     * 
+     * */
+    function getUploadResult(collectionName) {
+        return new Promise((resolve, reject) => {
+            fetch('http://divaservices.unifr.ch/api/v2/collections/' + collectionName, {
+                method: "GET"
+            }).then(function (res) {
+                return res.json();
+            }).then(function (data) {
+                if (data.statusCode === 200) {
+                    resolve(data.files[0].file.identifier);
+                } else {
+                    setTimeout(function () {
+                        resolve(getUploadResult(collectionName));
+                    }, 1000);
+                }
+            })
+        })
+    }
+
+    /**
+     * Encodes the image as base64 string to upload it to DIVAServices
+     * the results are stored in the global variables 'currentFile' and 'currentImage'
+     * 
+     * */
+    function encodeImageFileAsURL(element) {
+        var file = element.files[0];
+        var reader = new FileReader();
+        reader.onloadend = function () {
+            currentImage = reader.result;
+            currentFile = file;
+            uploadImage();
+        }
+        reader.onload = function (e) {
+            document.getElementById('orig_image').src = e.target.result;
+            document.getElementById('upload_info').style.display = 'none';
+        }
+        reader.readAsDataURL(file);
+    }
+
+    function uploadImageUrl(element) {
+        var tmpData = JSON.stringify({
+            "files": [
+                {
+                    "type": "url",
+                    "value": element.file.url,
+                    "name": element.file.name
+                }
+            ]
+        });
+        return new Promise((resolve, reject) => {
+            fetch("http://divaservices.unifr.ch/api/v2/collections", {
+                method: "POST",
+                body: tmpData,
+                headers: new Headers({ 'content-type': 'application/json' })
+            }).then(function (res) {
+                return res.json();
+            }).then(async function (data) {
+                collection = data.collection;
+                resolve();
+            });
+        });
+    }
+
+    function addImageUrl(element) {
+        var tmpData = JSON.stringify({
+            "files": [
+                {
+                    "type": "url",
+                    "value": element.file.url,
+                    "name": element.file.name + '.bin.png'
+                }
+            ]
+        });
+        return new Promise((resolve, reject) => {
+            fetch("http://divaservices.unifr.ch/api/v2/collections/" + collection, {
+                method: "PUT",
+                body: tmpData,
+                headers: new Headers({ 'content-type': 'application/json' })
+            }).then(function (res) {
+                return res.json();
+            }).then(async function (data) {
+                resolve();
+            });
+        });
+    }
+
+    /**
+     * Uploads the current image to DIVAServices
+     * */
+    function uploadImage() {
+        var data = JSON.stringify({
+            "files": [
+                {
+                    "type": "base64",
+                    "value": currentImage,
+                    "name": currentFile.name
+                }
+            ]
+        });
+        fetch("http://divaservices.unifr.ch/api/v2/collections", {
+            method: "POST",
+            body: data,
+            headers: new Headers({ 'content-type': 'application/json' })
+        }).then(function (res) {
+            return res.json();
+        }).then(async function (data) {
+            collection = data.collection;
+            identifier = await getUploadResult(data.collection);
+            document.getElementById('recBtn').disabled = false;
+        })
+    }
+
+</script>
+
+<body>
+    <div class="jumbotron">
+        <div class="container">
+            <h1>OCR Recognition Experimentation</h1>
+            <p>
+                <h3>Upload</h3>
+                <div>Make sure that the image is larger than 600x600 pixels. Otheriwse OCROpus will complain that it's
+                    too small.</div>
+                <label class="btn btn-primary" for="my-file-selector">
+                    <input id="my-file-selector" type="file" style="display:none" onchange="$('#upload-file-info').html(this.files[0].name);encodeImageFileAsURL(this);">
+                    Choose File...
+                </label>
+                <span class='label label-info' id="upload-file-info"></span>
+            </p>
+
+            <p id="upload_info_block">
+                <div id="upload_info">
+                    <strong>Upload a file first</strong>
+                </div>
+                <img id="orig_image"></img>
+            </p>
+
+            <div class="row">
+                <div class="col-md-auto">
+                    <div class="control-group button-wrapper">
+                        <button class="btn btn-primary btn-block" onclick="recognize()" disabled=true id='recBtn'>Recognize!</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <div class="container">
+        <!-- Example row of columns -->
+        <div class="row" style="visibility: hidden">
+            <div class="loader" id="spinner"></div>
+        </div>
+        <div class="row">
+            <div class="col-md-auto">
+                <h2>Binarization Result</h2>
+                <div id='bin_result' style="visibility: hidden">
+                    <img id='bin_image'>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-auto">
+                <h2>Segmentation Result</h2>
+                <div id='seg_result' style="visibility: hidden">
+                    <img id='seg_image'>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-auto">
+                <h2>Recognition Result</h2>
+                <div id='result'></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-auto">
+                <h2>Error Messages</h2>
+                <div id='errors' class='alert alert-danger'>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
