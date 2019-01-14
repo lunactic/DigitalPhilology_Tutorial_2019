@@ -1,140 +1,102 @@
-# Introduction
- Time: 30-45 min
-
-In this first part the goal is to execute a small workflow using methods on DIVAServices.
-You can find prepared code in ocr.html and the solutions in ocr_solution.html.
-
-The workflow is as follows:
-
-  - Upload the selected input image to DIVAServices
-  - Binarize the image using OCRopus Binarization and store the result on DIVAServices
-  - Segment the binary image into text lines using OCRopus page segmentation
-  - Recognize the text using the default english recognition model
+# DIVAServices_Binarization_Example
+Example visualizing different Binarization methods in JavaScript
 
 
-# Tasks
+The code in index.html is not complete and is meant to be a starting point for the following exercises:
+
 
 ## Task 1 - Testing the application
-Open the file ocr_solution with your favorite modern web browser (Edge, Firefox, Chrome).
 
-Upload the image example.png provided in this repository and recognize the contents using the "Recognize!" button.
+Open the index.html file with your favorite modern web browser (Edge, Firefox or Chrome).
 
-The application shows the intermediate outputs at every step.
+Upload an image of your choosing using the "Choose File..." Button, and then binarize the image using "Otsu Binarization". Once the binarization is finished it will be displayed in your browser.
 
 ## Task 2 - Read some code
-Open the ocr.html file with your favourite code/text editor (JavaScript highlighting will help). All important code information can be found at the top of the file within the \<script>\</script> tags.
 
-Locate the `binarize` method, and read its code. This method will perform the binarization from OCRopus on DIVAServices and polls for the result. The process for this is the following:
+Open the index.html file with your favorite code/text editor. All important code can be found at the top of the file within the \<script\> tag.
 
-1. Generate the POST request
-  
-    First the request body for the POST  request is generated. The request body will look like this:
+Locate the `otsuBinarization` method, and read the code. This method starts the otsu binarization process on DIVAServices and polls for the result. The process for this is the following:
+
+1. Generate POST request
+
+    First the request body for the POST request is generated. The request body will look like this:
 
     ``` JSON
     {
-      "parameters": {
-        "enableSkew":true,
-        "maxskew":2.0,
-        "skewsteps":8.0
-      },
-      "data": [
-        {
-          "inputImage": identifier
+            "parameters": {},
+            "data": [
+                {
+                    "inputImage": identifier
+                }
+            ]
         }
-      ]
-    }
     ```
-    where `identifier` refers to the generated identifier in the `uploadImage` method (this upload process is automatically triggered).
+    where `identifier` refers to the automatically generated identifier of the uploaded image.
 
-2. Execute the POST request
+2. Execute POST request.
 
-    The POST request is sent to the URL of the OCRopus binarization method on DIVAServices with:
+    The POST request is sent to the URL of the otsu binarization method on DIVAServices with:
 
     ``` JavaScript
-    fetch("http://divaservices.unifr.ch/api/v2/binarization/ocropusbinarization/1", {
-      method: "POST",
-      body: data,
-      headers: new Headers({ 'content-type': 'application/json' })
-    }).
+     fetch("http://divaservices.unifr.ch/api/v2/binarization/otsubinarization/1", {
+            method: "POST",
+            body: data,
+            headers: new Headers({ 'content-type': 'application/json' })
+        })
     ```
-    This will start the execution of the binarization on DIVAServices.
 
-3. Process the response and poll for results
+3. Process response and poll for results
 
-    DIVAServices will respond to the start process with data like this:
-
-  ``` JSON
-  {
-    "results": [
+    DIVAServices will response with data like this:
+    ``` JSON
     {
-      "resultLink": "http://divaservices.unifr.ch/api/v2/results/redsugaryindianspinyloach/data_0/data_0.json"
-    }
+	"results": [
+      {
+        "resultLink": "http://divaservices.unifr.ch/api/v2/results/teemingangelicprimate/data_0/data_0.json"
+      }
     ],
-    "collection": "redsugaryindianspinyloach",
-    "resultLink": "http://divaservices.unifr.ch/api/v2/results/redsugaryindianspinyloach.json",
+    "collection": "teemingangelicprimate",
+    "resultLink": "http://divaservices.unifr.ch/api/v2/results/teemingangelicprimate.json",
     "message": "This url is available for 24 hours",
     "status": "done",
     "statusCode": 202
-  }
-  ```
-  We are interested in the `resultLink` inside the `results` array. We poll this url using the `getResult(url)` method to poll every second to check if the result is available.
-
-  The result itself will look like this:
-
-  ``` JSON
-{
-  "output": [
-    {
-      "file": {
-        "name": "ocropusBinaryImage",
-        "type": "image",
-        "description": "Generated Binary Image",
-        "options": {
-          "colorspace": "binary",
-          "visualization": true
-        },
-        "mime-type": "image/png",
-        "url": "http://divaservices.unifr.ch/api/v2/results/redsugaryindianspinyloach/data_0/0001.bin.png"
-      }
-    },
-    {
-      "file": {
-        "mime-type": "text/plain",
-        "type": "log",
-        "url": "http://divaservices.unifr.ch/api/v2/results/redsugaryindianspinyloach/data_0/logFile.txt",
-        "name": "logFile.txt",
-        "options": {
-          "visualization": false
-        }
-      }
     }
-  ],
-  "status": "done",
-  "resultLink": "http://divaservices.unifr.ch/api/v2/results/redsugaryindianspinyloach/data_0/data_0.json",
-  "collectionName": "redsugaryindianspinyloach"
+   ```
+    This response is used in the `getResult(url)` method to poll every second to check if the result is computed. 
+
+
+# Task 3 - Implement Sauvola and OCRopus Binarization
+
+Using the information from above complete the two unfinished methods `sauvolaBinarization` and `ocropusBinarization`.
+
+Hints:
+ - The URL for sauvola binarization is: http://divaservices.unifr.ch/api/v2/binarization/sauvolabinarization/1
+ - The URL for ocropus binarization is: http://divaservices.unifr.ch/api/v2/binarization/ocropusbinarization/1
+ - The identifier to show the sauvola image is: `sauvola`
+ - The identifier to show the ocropus image is: `ocropus`
+ 
+# Task 4 - Implement DoG Binarization
+The last Binarization method (DoG - Binarization) takes three additional parameters:
+ - Threshold: A threshold that should be increased if too much noise is left over. 
+ - Gauss1: A parameter that should be increased if large structures are not binarized well (e.g. thick strokes)
+ - Gauss2:  A parameter that should be decreased if small structures are not binarized well (e.g. small fine strokes)
+
+Implement the method `dogBinarization` such that it generates a POST request with a request body like this:
+
+``` JSON
+{
+    "parameters": {
+        "threshold": 0.1,
+        "gauss1": 15,
+        "gauss2": 1.5
+    },
+    "data": [
+        {
+            "inputImage": identifier
+        }
+    ]
 }
-  ```
-  From this result we can extract the url to the binary image and use this to set the `src` of the `bin_image` element in the HTML page.
-
-  At the bottom of the method we re-upload the binary image to DIVAServices, a step currently necessary to make the binary image available for further processing.
-  ## Task 3 - Make some changes
-
-  Your task is to complete the `segment()` method such that it will work properly.
-
-  Hints:
-   - The URL for the page segmentation is: http://divaservices.unifr.ch/api/v2/segmentation/ocropuspagesegmentation/1
-   - The method takes no parameters
-   - the `identifier` is already correctly set to be reused
-   - use a similar call structure for the method as in the binarization
-
-  ## Task 4 - Optional
-
-  As an additional task if you feel like it. Try to make us of another binarization method and try to compare results.
-
-  On DIVAServices there are at least two other methods available:
-   - Otsu Binarization at: http://divaservices.unifr.ch/api/v2/binarization/otsubinarization/1
-   - Sauvola Binarization at: http://divaservices.unifr.ch/api/v2/binarization/sauvolabinarization/1
-     - Sauvola Binarization takes two parameters:
-       - "radius": an integer number between 2 and 45 to define the radius of the local region
-       - "thres_tune": a number between 0.1 and 0.6 to tune the threshold
-    
+```
+Hints:
+ - The values of the sliders can be access with `document.getElementById("...").value
+ - The 'id's of the three sliders are `thresh_slider`, `gauss1_slider`, and `gauss2_slider`
